@@ -1,16 +1,29 @@
 import streamlit as st
+import pandas as pd
+import joblib
 
-# Mengatur tampilan halaman web
+# ==========================================
+# 1. MEMUAT ARTIFAK AI (Model, Fitur, Scaler)
+# ==========================================
+# st.cache_resource digunakan agar file berat hanya diload 1x saat web menyala
+@st.cache_resource
+def load_ai_artifacts():
+    model = joblib.load('jdm_rf_model_tuned.joblib')
+    fitur = joblib.load('jdm_fitur_kolom.joblib')
+    scaler = joblib.load('jdm_scaler.joblib')
+    return model, fitur, scaler
+
+model_rf, fitur_kolom, scaler = load_ai_artifacts()
+
+# ==========================================
+# 2. ANTARMUKA WEBSITE (UI)
+# ==========================================
 st.set_page_config(page_title="JDM Car Predictor", page_icon="🏎️", layout="centered")
 
-# Header Website
 st.title("🏎️ JDM Used Car Price Predictor")
-st.write("Selamat datang! Masukkan spesifikasi mobil JDM impianmu di bawah ini untuk melihat estimasi harganya di pasaran.")
-
-# Membuat garis pemisah
+st.write("Masukkan spesifikasi mobil JDM impianmu di bawah ini untuk melihat estimasi harganya di pasaran.")
 st.markdown("---")
 
-# Membuat Form Input dibagi menjadi 2 kolom agar rapi
 col1, col2 = st.columns(2)
 
 with col1:
@@ -26,6 +39,36 @@ with col2:
     fuel = st.selectbox("Bahan Bakar", ["gasoline", "diesel", "hybrid"])
 
 st.markdown("---")
-# Tombol Prediksi (Logikanya akan kita bangun besok)
+
+# ==========================================
+# 3. LOGIKA PREDIKSI AI SAAT TOMBOL DITEKAN
+# ==========================================
 if st.button("Hitung Estimasi Harga! 💸", use_container_width=True):
-    st.info("Tombol ditekan! Logika AI sedang dalam proses pembangunan...")
+    
+    # a. Membungkus input user menjadi DataFrame 1 baris
+    user_input = pd.DataFrame({
+        'year': [year],
+        'mileage': [mileage],
+        'engine_capacity': [engine_capacity],
+        'mark': [mark],
+        'transmission': [transmission],
+        'fuel': [fuel]
+    })
+    
+    # b. One-Hot Encoding input user (mengubah teks jadi kolom)
+    input_encoded = pd.get_dummies(user_input)
+    
+    # c. MENYAMAKAN KOLOM: Pastikan kolom input = kolom saat model ditraining!
+    # Kolom merek/bahan bakar lain yang tidak dipilih user akan diisi dengan angka 0
+    input_final = input_encoded.reindex(columns=fitur_kolom, fill_value=0)
+    
+    # d. Menggunakan SCALER yang diselamatkan tadi untuk mengecilkan angka numerik
+    kolom_numerik = ['year', 'mileage', 'engine_capacity']
+    input_final[kolom_numerik] = scaler.transform(input_final[kolom_numerik])
+    
+    # e. Minta AI menebak harganya!
+    prediksi_harga = model_rf.predict(input_final)
+    
+    # f. Menampilkan hasil ke layar
+    st.success(f"### 🎯 Estimasi Harga Pasaran: Rp {int(prediksi_harga[0]):,}")
+    st.balloons() # Efek animasi balon sebagai perayaan!
